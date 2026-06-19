@@ -1,5 +1,5 @@
 {
-  "name": "pi-fast-resume",
+  "name": "pi-resume",
   "version": "1.0.0",
   "description": "Fast session resume for pi coding agent — /r2 instant resume, /rs paginated picker",
   "type": "module",
