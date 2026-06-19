@@ -1,0 +1,167 @@
+/**
+ * Fast session scanner using stat + lazy header parse.
+ *
+ * Key principle: never read full .jsonl files.
+ * - stat() for mtime/size sorting
+ * - First ~50 lines for header, session_info, first user message
+ */
+
+import { readdir, stat } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { createInterface } from "node:readline";
+import { join } from "node:path";
+
+export interface SessionEntry {
+  file: string;
+  mtime: Date;
+  size: number;
+  id?: string;
+  timestamp?: string;
+  cwd?: string;
+  name?: string;
+  firstMessage?: string;
+}
+
+export interface StatResult {
+  file: string;
+  mtime: Date;
+  size: number;
+}
+
+/**
+ * Fast stat-only scan: readdir + stat, sorted by mtime desc.
+ * No file content is read.
+ */
+export async function statScan(sessionDir: string): Promise<StatResult[]> {
+  let entries: string[];
+  try {
+    entries = await readdir(sessionDir);
+  } catch {
+    return [];
+  }
+
+  const jsonlFiles = entries.filter((f) => f.endsWith(".jsonl"));
+
+  const results = await Promise.all(
+    jsonlFiles.map(async (f) => {
+      const fullPath = join(sessionDir, f);
+      try {
+        const s = await stat(fullPath);
+        if (!s.isFile()) return null;
+        return { file: fullPath, mtime: s.mtime, size: s.size };
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  const valid = results.filter((r): r is StatResult => r !== null);
+  valid.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+  return valid;
+}
+
+/**
+ * Read session metadata from first ~50 lines of a .jsonl file.
+ * Caller provides mtime/size from prior stat() to avoid double-stat.
+ */
+export async function readSessionMeta(
+  filePath: string,
+  known?: { mtime: Date; size: number },
+): Promise<SessionEntry> {
+  const entry: SessionEntry = {
+    file: filePath,
+    mtime: known?.mtime ?? new Date(0),
+    size: known?.size ?? 0,
+  };
+
+  if (!known) {
+    try {
+      const s = await stat(filePath);
+      entry.mtime = s.mtime;
+      entry.size = s.size;
+    } catch {}
+  }
+
+  const MAX_LINES = 50;
+  let lineCount = 0;
+
+  try {
+    const rl = createInterface({
+      input: createReadStream(filePath, { encoding: "utf8" }),
+      crlfDelay: Infinity,
+    });
+
+    for await (const line of rl) {
+      lineCount++;
+      if (lineCount > MAX_LINES) break;
+
+      try {
+        const parsed = JSON.parse(line);
+
+        if (parsed.type === "session" && !entry.id) {
+          entry.id = parsed.id;
+          entry.timestamp = parsed.timestamp;
+          entry.cwd = parsed.cwd;
+          continue;
+        }
+
+        if (parsed.type === "session_info" && parsed.name) {
+          entry.name = parsed.name.trim();
+          continue;
+        }
+
+        if (!entry.firstMessage && parsed.type === "message") {
+          const msg = parsed.message;
+          if (msg?.role === "user" && Array.isArray(msg.content)) {
+            for (const block of msg.content) {
+              if (block.type === "text" && block.text) {
+                entry.firstMessage = block.text.slice(0, 80).replace(/\n/g, " ");
+                break;
+              }
+            }
+          }
+        }
+      } catch {
+        // skip unparseable lines
+      }
+
+      if (entry.id && entry.firstMessage) break;
+    }
+
+    rl.close();
+  } catch {}
+
+  return entry;
+}
+
+/**
+ * Scan a page of sessions with metadata.
+ * Pass known mtime/size from statScan to avoid double stat().
+ */
+export async function scanPage(
+  sessionDir: string,
+  offset: number,
+  limit: number,
+  maxDays?: number,
+  excludeFile?: string,
+): Promise<{ entries: SessionEntry[]; total: number; hasMore: boolean }> {
+  const all = await statScan(sessionDir);
+
+  let filtered = all;
+  if (maxDays && maxDays > 0) {
+    const cutoff = Date.now() - maxDays * 86400_000;
+    filtered = all.filter((f) => f.mtime.getTime() > cutoff);
+  }
+
+  if (excludeFile) {
+    filtered = filtered.filter((f) => f.file !== excludeFile);
+  }
+
+  const total = filtered.length;
+  const page = filtered.slice(offset, offset + limit);
+  const hasMore = offset + limit < total;
+
+  const entries = await Promise.all(page.map((f) => readSessionMeta(f.file, f)));
+
+  return { entries, total, hasMore };
+}
