@@ -2,7 +2,8 @@
  * pi-fast-resume — fast session resume without reading all .jsonl files.
  *
  * Commands:
- *   /r2              — instantly switch to the most recent session (stat-only)
+ *   /r1 .. /r5       — instantly switch to the N-th most recent session
+ *                      (stat-only; /r1 = latest, /r5 = 5th, current excluded)
  *   /rs              — paginated session picker (last 20, "Load more", tier filter)
  *   /rs set page N   — set page size (1-50)
  *   /rs set days N   — set maxDays filter (0-30, 0 = no limit)
@@ -16,34 +17,53 @@ import { getSessionDir } from "../src/session-dir.ts";
 
 const DAY_TIERS = [7, 14, 0] as const;
 
+// How many ranked instant-resume commands to register: /r1 .. /rN.
+const MAX_RANK = 5;
+
+const ordinal = (n: number): string => {
+  if (n === 1) return "most recent";
+  const suffix = n === 2 ? "nd" : n === 3 ? "rd" : "th";
+  return `${n}${suffix} most recent`;
+};
+
 export default function (pi: ExtensionAPI) {
-  pi.registerCommand("r2", {
-    description: "Instantly resume the most recent session",
-    handler: async (_args: string, ctx: any) => {
-      const sessionDir = getSessionDir(ctx.cwd);
-      const files = await statScan(sessionDir);
+  // Register /r1 .. /rN — each jumps to the rank-th most recent session
+  // (by mtime, current session excluded). /r1 = latest, /r2 = 2nd, etc.
+  for (let rank = 1; rank <= MAX_RANK; rank++) {
+    pi.registerCommand(`r${rank}`, {
+      description: `Instantly resume the ${ordinal(rank)} session`,
+      handler: async (_args: string, ctx: any) => {
+        const sessionDir = getSessionDir(ctx.cwd);
+        const files = await statScan(sessionDir);
 
-      if (files.length === 0) {
-        ctx.ui.notify("No sessions found", "error");
-        return;
-      }
+        if (files.length === 0) {
+          ctx.ui.notify("No sessions found", "error");
+          return;
+        }
 
-      const currentFile = ctx.sessionManager.getSessionFile() ?? undefined;
-      const target = files.find((f: { file: string }) => f.file !== currentFile);
+        const currentFile = ctx.sessionManager.getSessionFile() ?? undefined;
+        const others = files.filter((f: { file: string }) => f.file !== currentFile);
 
-      if (!target) {
-        ctx.ui.notify("No other sessions to resume", "info");
-        return;
-      }
+        const target = others[rank - 1];
+        if (!target) {
+          ctx.ui.notify(
+            others.length === 0
+              ? "No other sessions to resume"
+              : `Only ${others.length} other session${others.length === 1 ? "" : "s"} available`,
+            "info",
+          );
+          return;
+        }
 
-      const meta = await readSessionMeta(target.file, target);
-      await ctx.switchSession(target.file, {
-        withSession: async (newCtx: any) => {
-          newCtx.ui.notify(`Resumed: ${truncate(sessionLabel(meta), 50)}`, "info");
-        },
-      });
-    },
-  });
+        const meta = await readSessionMeta(target.file, target);
+        await ctx.switchSession(target.file, {
+          withSession: async (newCtx: any) => {
+            newCtx.ui.notify(`Resumed: ${truncate(sessionLabel(meta), 50)}`, "info");
+          },
+        });
+      },
+    });
+  }
 
   pi.registerCommand("rs", {
     description: "Smart resume: paginated session picker (last 20, Load more, tier filter)",

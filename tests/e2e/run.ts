@@ -3,9 +3,9 @@
  *
  * Runs inside a Docker container with pi + pi-resume installed.
  * Tests the full lifecycle:
- *   1. Before install: no /r2, /rs commands
+ *   1. Before install: no /r1../r5, /rs commands
  *   2. Install package from local path
- *   3. After install: /r2, /rs commands available
+ *   3. After install: /r1../r5, /rs commands available
  *   4. Session fixtures: create fake sessions, verify scanner picks them up
  *   5. Config: /rs set page, /rs set days persisted
  */

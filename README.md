@@ -8,11 +8,11 @@ Built-in `/resume` reads and parses **every line** of every session file to buil
 
 ## Solution
 
-Two commands that use `stat()` + lazy partial reads:
+Commands that use `stat()` + lazy partial reads:
 
 | Command | What it does | Speed |
 |---------|-------------|-------|
-| `/r2` | Instantly switch to the most recent session | <50ms (stat-only) |
+| `/r1` … `/r5` | Instantly switch to the N-th most recent session (`/r1` = latest) | <50ms (stat-only) |
 | `/rs` | Paginated picker: last 20, with tier navigation | <200ms first page |
 
 ## Install
@@ -23,9 +23,17 @@ pi install npm:pi-fast-resume
 
 ## Commands
 
-### `/r2` — Instant Resume
+### `/r1` … `/r5` — Instant Ranked Resume
 
-Switches to the most recent session (by mtime) in one step. No picker, no parsing.
+Switch to the N-th most recent session (by mtime) in one step. No picker, no parsing.
+
+- `/r1` — most recent session
+- `/r2` — 2nd most recent
+- … up to `/r5` — 5th most recent
+
+The current session is always excluded from the ranking, so `/r1` reliably jumps
+to the previous session. If fewer sessions exist than the requested rank, a
+notice is shown and nothing is switched.
 
 ### `/rs` — Smart Resume
 
@@ -49,7 +57,7 @@ Config is stored in `~/.pi/agent/extensions/pi-fast-resume/config.json`.
 
 ## How it works
 
-1. **`/r2`**: `readdir` → `stat` each `.jsonl` → sort by mtime → `switchSession(newest)`
+1. **`/r1`…`/r5`**: `readdir` → `stat` each `.jsonl` → sort by mtime → exclude current → `switchSession(others[rank-1])`
 2. **`/rs`**: Same stat scan, then read only the **first ~50 lines** of each file on the current page to extract session name and first user message
 
 No full file parsing. No `buildSessionInfo()`. No reading message content beyond the first user message.
