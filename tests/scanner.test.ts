@@ -3,7 +3,14 @@ import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { statScan, readSessionMeta, scanPage } from "../src/scanner.ts";
+import { existsSync } from "node:fs";
+import {
+  statScan,
+  readSessionMeta,
+  scanPage,
+  scanSubagentTrees,
+  deleteSubagentTrees,
+} from "../src/scanner.ts";
 
 const TEST_DIR = join(tmpdir(), `pi-fast-resume-test-${Date.now()}`);
 
@@ -176,5 +183,81 @@ describe("scanPage", () => {
       assert.ok(entry.id);
       assert.ok(entry.firstMessage?.match(/^Message \d$/));
     }
+  });
+});
+
+describe("scanSubagentTrees / deleteSubagentTrees", () => {
+  const SA_DIR = join(TEST_DIR, "subagents");
+  const TREE1 = "2026-07-08T06-41-35-742Z_019f4075-e3fe-7642-a8bc-926b47d5aba8";
+  const TREE2 = "2026-07-09T10-00-00-000Z_019f5000-aaaa-bbbb-cccc-ddddeeeeffff";
+
+  before(() => {
+    mkdirSync(SA_DIR, { recursive: true });
+    // Top-level user session files (must NEVER be treated as subagent trees).
+    writeFileSync(join(SA_DIR, `${TREE1}.jsonl`), '{"type":"session","id":"top"}\n');
+    writeFileSync(join(SA_DIR, "plain.jsonl"), '{"type":"session","id":"p"}\n');
+    // Subagent tree 1: two runIds, one with 2 runs.
+    mkdirSync(join(SA_DIR, TREE1, "06e644cf", "run-0"), { recursive: true });
+    writeFileSync(join(SA_DIR, TREE1, "06e644cf", "run-0", "session.jsonl"), "x".repeat(100));
+    mkdirSync(join(SA_DIR, TREE1, "06e644cf", "run-1"), { recursive: true });
+    writeFileSync(join(SA_DIR, TREE1, "06e644cf", "run-1", "session.jsonl"), "y".repeat(50));
+    mkdirSync(join(SA_DIR, TREE1, "04c0ac85", "run-0"), { recursive: true });
+    writeFileSync(join(SA_DIR, TREE1, "04c0ac85", "run-0", "session.jsonl"), "z".repeat(30));
+    // Subagent tree 2: one run.
+    mkdirSync(join(SA_DIR, TREE2, "aabbccdd", "run-0"), { recursive: true });
+    writeFileSync(join(SA_DIR, TREE2, "aabbccdd", "run-0", "session.jsonl"), "w".repeat(10));
+    // A non-matching directory that must be ignored.
+    mkdirSync(join(SA_DIR, "not-a-session-dir"), { recursive: true });
+    writeFileSync(join(SA_DIR, "not-a-session-dir", "x.jsonl"), "nope");
+  });
+
+  it("finds only session-tree subdirs, newest first, with run counts + bytes", async () => {
+    const trees = await scanSubagentTrees(SA_DIR);
+
+    assert.equal(trees.length, 2, "only the two <ts>_<uuid> subdirs");
+    assert.equal(trees[0]!.name, TREE2, "newest (TREE2) first");
+    assert.equal(trees[1]!.name, TREE1);
+
+    const t1 = trees.find((t) => t.name === TREE1)!;
+    assert.equal(t1.runs, 3, "3 session.jsonl files across 2 runIds");
+    assert.equal(t1.bytes, 180, "100 + 50 + 30 bytes");
+
+    const t2 = trees.find((t) => t.name === TREE2)!;
+    assert.equal(t2.runs, 1);
+    assert.equal(t2.bytes, 10);
+  });
+
+  it("ignores non-matching dirs and top-level .jsonl files", async () => {
+    const trees = await scanSubagentTrees(SA_DIR);
+    const names = trees.map((t) => t.name);
+    assert.ok(!names.includes("not-a-session-dir"));
+    assert.ok(!names.some((n) => n.endsWith(".jsonl")));
+  });
+
+  it("returns empty for a missing dir", async () => {
+    assert.deepEqual(await scanSubagentTrees("/nonexistent-sa-dir-zzz"), []);
+  });
+
+  it("deletes the tree subdirs but leaves top-level session files intact", async () => {
+    const trees = await scanSubagentTrees(SA_DIR);
+    const removed = await deleteSubagentTrees(SA_DIR, trees);
+
+    assert.equal(removed, 2);
+    assert.ok(!existsSync(join(SA_DIR, TREE1)), "tree1 dir gone");
+    assert.ok(!existsSync(join(SA_DIR, TREE2)), "tree2 dir gone");
+    // Top-level user session files survive.
+    assert.ok(existsSync(join(SA_DIR, `${TREE1}.jsonl`)), "top-level .jsonl kept");
+    assert.ok(existsSync(join(SA_DIR, "plain.jsonl")), "plain session kept");
+    // Unrelated dir survives.
+    assert.ok(existsSync(join(SA_DIR, "not-a-session-dir")), "unrelated dir kept");
+
+    assert.deepEqual(await scanSubagentTrees(SA_DIR), [], "nothing left to scan");
+  });
+
+  it("refuses to delete a tree whose dir path doesn't match sessionDir/name", async () => {
+    const spoof = [{ dir: "/etc", name: "passwd", runs: 0, bytes: 0 }];
+    const removed = await deleteSubagentTrees(SA_DIR, spoof as any);
+    assert.equal(removed, 0, "path-mismatch guard blocks deletion");
+    assert.ok(existsSync("/etc"), "/etc untouched");
   });
 });

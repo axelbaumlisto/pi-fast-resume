@@ -7,11 +7,19 @@
  *   /rs              — paginated session picker (last 20, "Load more", tier filter)
  *   /rs set page N   — set page size (1-50)
  *   /rs set days N   — set maxDays filter (0-30, 0 = no limit)
+ *   /rds             — delete all subagent session trees for the current project
+ *                      (asks for confirmation; top-level sessions untouched)
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { statScan, scanPage, readSessionMeta } from "../src/scanner.ts";
-import { formatEntry, truncate, sessionLabel } from "../src/format.ts";
+import {
+  statScan,
+  scanPage,
+  readSessionMeta,
+  scanSubagentTrees,
+  deleteSubagentTrees,
+} from "../src/scanner.ts";
+import { formatEntry, truncate, sessionLabel, formatSize } from "../src/format.ts";
 import { loadConfig, saveConfig } from "../src/config.ts";
 import { getSessionDir } from "../src/session-dir.ts";
 
@@ -64,6 +72,43 @@ export default function (pi: ExtensionAPI) {
       },
     });
   }
+
+  pi.registerCommand("rds", {
+    description: "Delete subagent session trees for the current project (with confirmation)",
+    handler: async (_args: string, ctx: any) => {
+      const sessionDir = getSessionDir(ctx.cwd);
+      const trees = await scanSubagentTrees(sessionDir);
+
+      if (trees.length === 0) {
+        ctx.ui.notify("No subagent sessions to delete for this project", "info");
+        return;
+      }
+
+      const totalRuns = trees.reduce((s, t) => s + t.runs, 0);
+      const totalBytes = trees.reduce((s, t) => s + t.bytes, 0);
+
+      const summary =
+        `Delete ${trees.length} subagent tree${trees.length === 1 ? "" : "s"} ` +
+        `(${totalRuns} run${totalRuns === 1 ? "" : "s"}, ${formatSize(totalBytes)})?`;
+
+      const choice = await ctx.ui.select(summary, [
+        `Delete ${trees.length} tree${trees.length === 1 ? "" : "s"} (${formatSize(totalBytes)})`,
+        "Cancel",
+      ]);
+
+      if (!choice || choice === "Cancel") {
+        ctx.ui.notify("Cancelled — nothing deleted", "info");
+        return;
+      }
+
+      const removed = await deleteSubagentTrees(sessionDir, trees);
+      ctx.ui.notify(
+        `Deleted ${removed}/${trees.length} subagent tree${removed === 1 ? "" : "s"} ` +
+          `(${formatSize(totalBytes)} freed)`,
+        removed === trees.length ? "info" : "error",
+      );
+    },
+  });
 
   pi.registerCommand("rs", {
     description: "Smart resume: paginated session picker (last 20, Load more, tier filter)",

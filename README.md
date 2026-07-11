@@ -14,6 +14,7 @@ Commands that use `stat()` + lazy partial reads:
 |---------|-------------|-------|
 | `/r1` … `/r5` | Instantly switch to the N-th most recent session (`/r1` = latest) | <50ms (stat-only) |
 | `/rs` | Paginated picker: last 20, with tier navigation | <200ms first page |
+| `/rds` | Delete subagent session trees for the current project (with confirmation) | — |
 
 ## Install
 
@@ -54,6 +55,18 @@ Auto-escalates: if 7d is empty, jumps to 14d, then all.
 ```
 
 Config is stored in `~/.pi/agent/extensions/pi-fast-resume/config.json`.
+
+### `/rds` — Delete Subagent Sessions
+
+pi stores every subagent run under a subdirectory named like a top-level
+session (`<timestamp>_<uuid>/`), containing `<runId>/run-N/session.jsonl`.
+These accumulate on every subagent invocation and can bloat the sessions folder
+by hundreds of MB.
+
+`/rds` scans the **current project only**, shows how many trees / runs / MB
+would be freed, asks for **confirmation**, then recursively deletes just those
+subagent tree subdirectories. Your real top-level `*.jsonl` sessions (the ones
+`/r1`…`/r5` and `/rs` list) are never touched.
 
 ## How it works
 
