@@ -7,6 +7,7 @@ import { existsSync } from "node:fs";
 import {
   statScan,
   readSessionMeta,
+  clearMetaCache,
   scanPage,
   scanSubagentTrees,
   deleteSubagentTrees,
@@ -33,6 +34,21 @@ after(() => rmSync(TEST_DIR, { recursive: true, force: true }));
 describe("statScan", () => {
   it("returns empty for missing dir", async () => {
     assert.deepEqual(await statScan("/nonexistent-dir-xyz-42"), []);
+  });
+
+  it("missing dir does NOT call onError (no sessions yet is normal)", async () => {
+    let called = false;
+    await statScan("/nonexistent-dir-xyz-42", () => (called = true));
+    assert.equal(called, false);
+  });
+
+  it("non-ENOENT readdir error calls onError", async () => {
+    // A path through a FILE (not dir) fails with ENOTDIR, not ENOENT.
+    const file = writeSession("blocker.jsonl", { type: "session", id: "blk" });
+    let msg: string | undefined;
+    const res = await statScan(join(file, "sub"), (m) => (msg = m));
+    assert.deepEqual(res, []);
+    assert.ok(msg, "onError should be called for non-ENOENT errors");
   });
 
   it("lists .jsonl files sorted by mtime desc", async () => {
@@ -90,6 +106,63 @@ describe("readSessionMeta", () => {
 
     const meta = await readSessionMeta(file);
     assert.equal(meta.name, "Named Session");
+  });
+
+  it("picks up a rename appended at the END of a long file", async () => {
+    // Rename appends session_info past the 50-line head scan window.
+    const filler = Array.from({ length: 80 }, (_, i) => ({
+      type: "message",
+      id: `f${i}`,
+      parentId: null,
+      message: { role: "assistant", content: [{ type: "text", text: `line ${i}` }] },
+    }));
+    const file = writeSession("meta-tail.jsonl", { type: "session", id: "mt" }, [
+      ...filler,
+      { type: "session_info", id: "si-tail", parentId: null, name: "Renamed Later" },
+    ]);
+
+    const meta = await readSessionMeta(file);
+    assert.equal(meta.name, "Renamed Later");
+  });
+
+  it("tail session_info overrides head name", async () => {
+    const file = writeSession("meta-tail2.jsonl", { type: "session", id: "mt2" }, [
+      { type: "session_info", id: "si1", parentId: null, name: "Old Name" },
+      { type: "session_info", id: "si2", parentId: null, name: "New Name" },
+    ]);
+
+    const meta = await readSessionMeta(file);
+    assert.equal(meta.name, "New Name");
+  });
+
+  it("caches by (file, mtime, size) and invalidates on change", async () => {
+    clearMetaCache();
+    const file = writeSession("meta-cache.jsonl", { type: "session", id: "c1" }, [
+      { type: "session_info", id: "si", parentId: null, name: "First" },
+    ]);
+
+    const meta1 = await readSessionMeta(file);
+    assert.equal(meta1.name, "First");
+
+    // Rewrite with a new name but force the SAME mtime → cache hit, old name.
+    const stale = new Date(meta1.mtime);
+    writeFileSync(
+      file,
+      [
+        JSON.stringify({ type: "session", id: "c1" }),
+        JSON.stringify({ type: "session_info", id: "si", parentId: null, name: "Second" }),
+      ].join("\n") + "\n",
+    );
+    utimesSync(file, stale, stale);
+    // Same byte length? Ensure sizes actually match for a real cache hit:
+    const metaCachedPath = await readSessionMeta(file, { mtime: stale, size: meta1.size });
+    assert.equal(metaCachedPath.name, "First", "same mtime+size should hit cache");
+
+    // New mtime → cache miss, fresh parse.
+    const now = new Date();
+    utimesSync(file, now, now);
+    const meta2 = await readSessionMeta(file);
+    assert.equal(meta2.name, "Second");
   });
 
   it("uses known mtime/size to avoid double stat", async () => {

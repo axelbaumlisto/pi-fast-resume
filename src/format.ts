@@ -29,6 +29,19 @@ export function sessionLabel(e: SessionEntry): string {
   return e.name || e.firstMessage || e.id || "untitled";
 }
 
-export function formatEntry(e: SessionEntry): string {
-  return `${formatAge(e.mtime).padEnd(10)} ${formatSize(e.size).padEnd(8)} ${truncate(sessionLabel(e), 60)}`;
+/**
+ * Format one picker row, fitting into `maxWidth` columns (terminal width).
+ * Reserves space for the age/size columns and the picker's cursor/indent
+ * so rows never wrap (wrapped rows break selection navigation in the TUI).
+ */
+// Columns the TUI select list draws around each row (cursor arrow, indent,
+// uniquify suffix like " (12)"). Keeping rows shorter than
+// terminal width minus this margin prevents line wrapping, which would
+// break cursor navigation in the picker.
+const PICKER_ROW_MARGIN = 6;
+
+export function formatEntry(e: SessionEntry, maxWidth = 80): string {
+  const prefix = `${formatAge(e.mtime).padEnd(10)} ${formatSize(e.size).padEnd(8)} `;
+  const labelMax = Math.max(10, maxWidth - prefix.length - PICKER_ROW_MARGIN);
+  return prefix + truncate(sessionLabel(e), labelMax);
 }

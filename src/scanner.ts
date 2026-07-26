@@ -6,7 +6,7 @@
  * - First ~50 lines for header, session_info, first user message
  */
 
-import { readdir, stat, rm } from "node:fs/promises";
+import { readdir, stat, rm, open } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
@@ -31,12 +31,22 @@ export interface StatResult {
 /**
  * Fast stat-only scan: readdir + stat, sorted by mtime desc.
  * No file content is read.
+ *
+ * A missing directory (no sessions yet) returns []. Other readdir errors
+ * (permissions, I/O) are surfaced via onError so callers can distinguish
+ * "no sessions" from "could not read sessions".
  */
-export async function statScan(sessionDir: string): Promise<StatResult[]> {
+export async function statScan(
+  sessionDir: string,
+  onError?: (message: string) => void,
+): Promise<StatResult[]> {
   let entries: string[];
   try {
     entries = await readdir(sessionDir);
-  } catch {
+  } catch (err: any) {
+    if (err?.code !== "ENOENT" && onError) {
+      onError(`Cannot read sessions dir: ${err?.message ?? err}`);
+    }
     return [];
   }
 
@@ -60,9 +70,20 @@ export async function statScan(sessionDir: string): Promise<StatResult[]> {
   return valid;
 }
 
+// Metadata cache keyed by file path, validated by (mtime, size). A session
+// file only changes by appending (mtime+size change), so a hit is always
+// fresh. Keeps /rs "Load more" and repeated opens I/O-free for known files.
+const metaCache = new Map<string, { mtimeMs: number; size: number; entry: SessionEntry }>();
+
+/** Test-only: clear the metadata cache. */
+export function clearMetaCache(): void {
+  metaCache.clear();
+}
+
 /**
  * Read session metadata from first ~50 lines of a .jsonl file.
  * Caller provides mtime/size from prior stat() to avoid double-stat.
+ * Results are cached by (file, mtime, size).
  */
 export async function readSessionMeta(
   filePath: string,
@@ -80,6 +101,12 @@ export async function readSessionMeta(
       entry.mtime = s.mtime;
       entry.size = s.size;
     } catch {}
+  }
+
+  const cached = metaCache.get(filePath);
+  if (cached && cached.mtimeMs === entry.mtime.getTime() && cached.size === entry.size) {
+    // Return a copy with the caller-provided mtime/size (identical anyway).
+    return { ...cached.entry, mtime: entry.mtime, size: entry.size };
   }
 
   const MAX_LINES = 50;
@@ -131,7 +158,58 @@ export async function readSessionMeta(
     rl.close();
   } catch {}
 
+  // Session renames APPEND a session_info entry at the end of the file, so
+  // a name found in the tail overrides whatever the head scan saw.
+  const tailName = await readTailName(filePath, entry.size);
+  if (tailName) entry.name = tailName;
+
+  metaCache.set(filePath, { mtimeMs: entry.mtime.getTime(), size: entry.size, entry: { ...entry } });
   return entry;
+}
+
+// How many bytes of the file tail to inspect for a trailing session_info.
+const TAIL_BYTES = 4096;
+
+/**
+ * Read the last TAIL_BYTES of a session file and return the name from the
+ * LAST parseable session_info line, if any. Cheap: one small read.
+ */
+async function readTailName(filePath: string, size: number): Promise<string | undefined> {
+  if (size <= 0) return undefined;
+
+  const readLen = Math.min(TAIL_BYTES, size);
+  const position = size - readLen;
+
+  let text: string;
+  try {
+    const fh = await open(filePath, "r");
+    try {
+      const buf = Buffer.alloc(readLen);
+      const { bytesRead } = await fh.read(buf, 0, readLen, position);
+      text = buf.subarray(0, bytesRead).toString("utf8");
+    } finally {
+      await fh.close();
+    }
+  } catch {
+    return undefined;
+  }
+
+  const lines = text.split("\n");
+  // When reading mid-file, the first line is likely a partial record — skip it.
+  const firstValid = position > 0 ? 1 : 0;
+  for (let i = lines.length - 1; i >= firstValid; i--) {
+    const line = lines[i]?.trim();
+    if (!line) continue;
+    try {
+      const parsed = JSON.parse(line);
+      if (parsed.type === "session_info" && typeof parsed.name === "string" && parsed.name.trim()) {
+        return parsed.name.trim();
+      }
+    } catch {
+      // partial or non-JSON line — keep walking up
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -144,8 +222,9 @@ export async function scanPage(
   limit: number,
   maxDays?: number,
   excludeFile?: string,
+  onError?: (message: string) => void,
 ): Promise<{ entries: SessionEntry[]; total: number; hasMore: boolean }> {
-  const all = await statScan(sessionDir);
+  const all = await statScan(sessionDir, onError);
 
   let filtered = all;
   if (maxDays && maxDays > 0) {

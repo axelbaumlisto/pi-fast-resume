@@ -1,15 +1,16 @@
 /**
  * Resolve the pi session directory for a given cwd.
- * Mirrors pi's internal encoding: --<path-with-dashes>--
+ *
+ * Preferred: derive it from the current session file (authoritative —
+ * survives changes to pi's internal path encoding). Fallback: mirror
+ * pi's encoding of cwd → `--<path-with-dashes>--`.
  */
 
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { getPiAgentDir } from "./pi-dir.ts";
 
-export function getSessionDir(cwd: string): string {
+export function getSessionDir(cwd: string, currentSessionFile?: string): string {
+  if (currentSessionFile) return dirname(currentSessionFile);
   const resolved = cwd.replace(/^\//, "").replace(/[/\\:]/g, "-");
-  return join(
-    process.env.PI_CODING_AGENT_DIR || join(process.env.HOME || "~", ".pi", "agent"),
-    "sessions",
-    `--${resolved}--`,
-  );
+  return join(getPiAgentDir(), "sessions", `--${resolved}--`);
 }

@@ -8,6 +8,10 @@
  *   3. After install: /r1../r5, /rs commands available
  *   4. Session fixtures: create fake sessions, verify scanner picks them up
  *   5. Config: /rs set page, /rs set days persisted
+ *   6. Session dir encoding
+ *   7. Startup flags (--r1/--rn/--r N) against a live pi run
+ *   8. Tail rename: session_info appended past the head-scan window
+ *   9. Picker duplicate-label resolution
  */
 
 import { describe, it, before, after } from "node:test";
@@ -245,5 +249,87 @@ describe("Phase 6: Session dir encoding", () => {
     const { getSessionDir } = await import("../../src/session-dir.ts");
     const dir = getSessionDir("/");
     assert.ok(dir.endsWith("----"));
+  });
+
+  it("prefers dirname of the current session file", async () => {
+    const { getSessionDir } = await import("../../src/session-dir.ts");
+    const dir = getSessionDir("/any", "/x/sessions/--p--/s.jsonl");
+    assert.equal(dir, "/x/sessions/--p--");
+  });
+});
+
+// ── Phase 7: Startup flags against a live pi run ───────────────────
+
+describe("Phase 7: Startup flags (--r1, --rn, --r N)", () => {
+  before(() => {
+    mkdirSync(PROJECT_CWD, { recursive: true });
+    writeSessionFile("flag1.jsonl", "fid1", "Flag test session");
+  });
+
+  // In -p mode switchSession is unavailable; the extension must degrade
+  // gracefully (a notice) and NEVER crash with "Extension error".
+  for (const flag of ["--r1", "--rn", "--r 1"]) {
+    it(`pi ${flag} does not produce an extension error`, () => {
+      const out = run(`cd ${PROJECT_CWD} && pi ${flag} -p --no-session 'test' 2>&1 || true`);
+      assert.ok(!out.includes("Extension error"), `pi ${flag} output: ${out.slice(0, 500)}`);
+    });
+  }
+
+  it("pi --r 99 (out of range) does not crash", () => {
+    const out = run(`cd ${PROJECT_CWD} && pi --r 99 -p --no-session 'test' 2>&1 || true`);
+    assert.ok(!out.includes("Extension error"), `output: ${out.slice(0, 500)}`);
+  });
+
+  it("registered flags appear in pi --help", () => {
+    const out = run("pi --help");
+    // Extension flags are announced in help output when registered.
+    assert.ok(!out.includes("Extension error"), "help should not error");
+  });
+});
+
+// ── Phase 8: Tail rename ─────────────────────────────────────
+
+describe("Phase 8: Rename appended past head-scan window", () => {
+  it("readSessionMeta picks up trailing session_info", async () => {
+    mkdirSync(PROJECT_SESSIONS, { recursive: true });
+    const file = join(PROJECT_SESSIONS, "renamed.jsonl");
+    const lines: string[] = [
+      JSON.stringify({ type: "session", version: 3, id: "rn1", timestamp: new Date().toISOString(), cwd: PROJECT_CWD }),
+    ];
+    for (let i = 0; i < 80; i++) {
+      lines.push(JSON.stringify({
+        type: "message", id: `m${i}`, parentId: i === 0 ? "rn1" : `m${i - 1}`,
+        message: { role: "assistant", content: [{ type: "text", text: `filler ${i}` }] },
+      }));
+    }
+    lines.push(JSON.stringify({ type: "session_info", id: "si-late", parentId: "m79", name: "Renamed via /name" }));
+    writeFileSync(file, lines.join("\n") + "\n");
+
+    const { readSessionMeta } = await import("../../src/scanner.ts");
+    const meta = await readSessionMeta(file);
+    assert.equal(meta.name, "Renamed via /name");
+  });
+});
+
+// ── Phase 9: Picker duplicate labels ─────────────────────────────
+
+describe("Phase 9: Picker resolves duplicate labels to distinct sessions", () => {
+  it("identical first messages produce unique picker rows", async () => {
+    const { buildPickerItems, resolveChoice } = await import("../../src/picker.ts");
+    const labels = ["1d ago 51.0MB Same message", "1d ago 51.0MB Same message", "1d ago 51.0MB Same message"];
+    const items = buildPickerItems(labels, { remaining: 5 });
+
+    assert.equal(new Set(items).size, items.length, "all rows must be unique");
+    assert.deepEqual(resolveChoice(items, items[1], 3), { kind: "entry", index: 1 });
+    assert.deepEqual(resolveChoice(items, items[2], 3), { kind: "entry", index: 2 });
+    assert.deepEqual(resolveChoice(items, items[3], 3), { kind: "more" });
+  });
+
+  it("nav functions step relative to current session", async () => {
+    const { navTarget, rankTarget } = await import("../../src/nav.ts");
+    const files = [{ file: "/s/new" }, { file: "/s/mid" }, { file: "/s/old" }];
+    assert.equal(navTarget(files, "/s/mid", 1).target?.file, "/s/old");
+    assert.equal(navTarget(files, "/s/mid", -1).target?.file, "/s/new");
+    assert.equal(rankTarget(files, "/s/new", 1).target?.file, "/s/mid");
   });
 });

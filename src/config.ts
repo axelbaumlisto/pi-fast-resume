@@ -5,12 +5,9 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { getPiAgentDir } from "./pi-dir.ts";
 
-const CONFIG_DIR = join(
-  process.env.PI_CODING_AGENT_DIR || join(process.env.HOME || "~", ".pi", "agent"),
-  "extensions",
-  "pi-fast-resume",
-);
+const CONFIG_DIR = join(getPiAgentDir(), "extensions", "pi-fast-resume");
 const CONFIG_PATH = join(CONFIG_DIR, "config.json");
 
 export interface Config {
@@ -45,7 +42,13 @@ export function loadConfig(): Config {
   return { ...DEFAULTS };
 }
 
-export function saveConfig(cfg: Config): void {
-  if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
-  writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2) + "\n");
+/** Save config. Returns an error message on failure instead of throwing. */
+export function saveConfig(cfg: Config): string | undefined {
+  try {
+    if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
+    writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2) + "\n");
+    return undefined;
+  } catch (err) {
+    return `Failed to save config: ${err instanceof Error ? err.message : String(err)}`;
+  }
 }

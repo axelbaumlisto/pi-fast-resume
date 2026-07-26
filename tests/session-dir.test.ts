@@ -17,4 +17,9 @@ describe("getSessionDir", () => {
     const dir = getSessionDir("/");
     assert.ok(dir.includes("----"));
   });
+
+  it("prefers dirname of the current session file when provided", () => {
+    const dir = getSessionDir("/any/cwd", "/custom/sessions/--proj--/2026_abc.jsonl");
+    assert.equal(dir, "/custom/sessions/--proj--");
+  });
 });

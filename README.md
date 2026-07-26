@@ -13,6 +13,8 @@ Commands that use `stat()` + lazy partial reads:
 | Command | What it does | Speed |
 |---------|-------------|-------|
 | `/r1` … `/r5` | Instantly switch to the N-th most recent session (`/r1` = latest) | <50ms (stat-only) |
+| `pi --r N` / `--r1`…`--r5` / `--rn` | Startup flag: open pi and immediately resume the N-th most recent session | <50ms (stat-only) |
+| `/rn` / `/rp` | Step to the next (older) / previous (newer) session relative to the current one | <50ms (stat-only) |
 | `/rs` | Paginated picker: last 20, with tier navigation | <200ms first page |
 | `/rds` | Delete subagent session trees for the current project (with confirmation) | — |
 
@@ -36,6 +38,31 @@ The current session is always excluded from the ranking, so `/r1` reliably jumps
 to the previous session. If fewer sessions exist than the requested rank, a
 notice is shown and nothing is switched.
 
+### `pi --r N` — Resume at Startup
+
+Start pi and immediately switch to the N-th most recent session (1-5):
+
+```bash
+pi --r1    # open pi in the latest session
+pi --rn    # same (alias for --r1)
+pi --r3    # open pi in the 3rd most recent
+pi --r 3   # same, numeric form
+```
+
+Same ranking as `/r1`…`/r5`. Invalid values show an error and start a normal
+new session. Interactive mode only (ignored with `-p`).
+
+### `/rn` / `/rp` — Step Navigation
+
+Walk the mtime-sorted session list relative to the **current** session:
+
+- `/rn` — next session (one step **older**)
+- `/rp` — previous session (one step **newer**)
+
+Useful after `/r1` lands on the wrong session: keep pressing `/rn` to walk back
+in time instead of recalculating ranks. A `(pos/total)` indicator is shown on
+each switch. At the ends of the list a notice is shown and nothing is switched.
+
 ### `/rs` — Smart Resume
 
 Shows a paginated list of recent sessions:
@@ -50,8 +77,9 @@ Auto-escalates: if 7d is empty, jumps to 14d, then all.
 ### Configuration
 
 ```
-/rs set page 30    # Sessions per page (1-50, default: 20)
-/rs set days 14    # Day filter for first tier (0-30, 0 = no filter, default: 7)
+/rs set            # Show current settings
+/rs set page 30    # Sessions per page (1-50, default: 20; out-of-range values are clamped)
+/rs set days 14    # Day filter for first tier (0-30, 0 = no filter, default: 7; clamped)
 ```
 
 Config is stored in `~/.pi/agent/extensions/pi-fast-resume/config.json`.
