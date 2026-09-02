@@ -21,7 +21,7 @@ Commands that use `stat()` + lazy partial reads:
 ## Install
 
 ```bash
-pi install npm:pi-fast-resume
+pi install npm:pi-resume
 ```
 
 ## Commands
@@ -130,7 +130,7 @@ No full file parsing. No `buildSessionInfo()`. No reading message content beyond
 ## Development
 
 ```bash
-git clone https://github.com/spex66/pi-fast-resume.git
+git clone https://github.com/axelbaumlisto/pi-fast-resume.git
 cd pi-fast-resume
 npm install
 npm test
