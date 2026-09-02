@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import { strict as assert } from "node:assert";
-import { rankTarget, navTarget, filterVisible, parseRankFlag } from "../src/nav.ts";
+import { rankTarget, navTarget, filterVisible, parseRankFlag, createdAtFromName, sortByCreated } from "../src/nav.ts";
 
 const files = [{ file: "/s/newest" }, { file: "/s/mid" }, { file: "/s/oldest" }];
 
@@ -135,5 +135,48 @@ describe("parseRankFlag", () => {
     assert.ok("error" in parseRankFlag("6", 5)!);
     assert.ok("error" in parseRankFlag("abc", 5)!);
     assert.ok("error" in parseRankFlag("", 5)!);
+  });
+});
+
+describe("createdAtFromName", () => {
+  it("parses pi session filename timestamp", () => {
+    const t = createdAtFromName("/s/2026-08-10T14-31-05-921Z_019fec15-97c1-7a42-bf80-307a87d6d5ae.jsonl");
+    assert.equal(t, Date.parse("2026-08-10T14:31:05.921Z"));
+  });
+  it("undefined for non-matching names", () => {
+    assert.equal(createdAtFromName("/s/random.jsonl"), undefined);
+  });
+});
+
+describe("sortByCreated", () => {
+  const mk = (name: string, mtimeMs: number) => ({ file: `/s/${name}`, mtime: new Date(mtimeMs) });
+  const A = mk("2026-08-01T00-00-00-000Z_a.jsonl", 0);
+  const B = mk("2026-08-02T00-00-00-000Z_b.jsonl", 0);
+  const C = mk("2026-08-03T00-00-00-000Z_c.jsonl", 0);
+
+  it("orders newest-created first regardless of mtime", () => {
+    // mtime says A is newest (just resumed) — creation order must win.
+    const shuffled = [{ ...A, mtime: new Date(9e12) }, C, B];
+    assert.deepEqual(sortByCreated(shuffled).map((f) => f.file), [C.file, B.file, A.file]);
+  });
+
+  it("walk is stable when resumed sessions get their mtime bumped", async () => {
+    let files = [C, B, A];
+    // /rn from C -> B
+    let r = await navTarget(sortByCreated(files), C.file, 1);
+    assert.equal(r.target?.file, B.file);
+    // resuming B bumps its mtime to now (extension appended on session_start)
+    files = files.map((f) => (f.file === B.file ? { ...f, mtime: new Date(9e12) } : f));
+    // /rn from B must go to A, not ping-pong back to C
+    r = await navTarget(sortByCreated(files), B.file, 1);
+    assert.equal(r.target?.file, A.file);
+    // /rp from A -> B, /rp from B -> C
+    assert.equal((await navTarget(sortByCreated(files), A.file, -1)).target?.file, B.file);
+    assert.equal((await navTarget(sortByCreated(files), B.file, -1)).target?.file, C.file);
+  });
+
+  it("falls back to mtime for unparseable names", () => {
+    const x = mk("x.jsonl", 100), y = mk("y.jsonl", 200);
+    assert.deepEqual(sortByCreated([x, y]).map((f) => f.file), [y.file, x.file]);
   });
 });

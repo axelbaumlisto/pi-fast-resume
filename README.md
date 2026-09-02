@@ -63,7 +63,12 @@ Walk the mtime-sorted session list relative to the **current** session:
 - `/rp` — previous session (one step **newer**)
 
 Useful after `/r1` lands on the wrong session: keep pressing `/rn` to walk back
-in time instead of recalculating ranks. A `(pos/total)` indicator is shown on
+in time instead of recalculating ranks.
+
+`/rn` / `/rp` walk by **creation time** (the timestamp in the session filename),
+not by mtime: resuming a session makes extensions append to it, which bumps its
+mtime and would otherwise reshuffle the list into a ping-pong between two
+sessions. `/r1` and `/rs` still rank by last activity (mtime). A `(pos/total)` indicator is shown on
 each switch. At the ends of the list a notice is shown and nothing is switched.
 
 ### `/rs` — Smart Resume

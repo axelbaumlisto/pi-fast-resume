@@ -37,7 +37,7 @@ import {
 import { formatEntry, truncate, sessionLabel, formatSize } from "../src/format.ts";
 import { loadConfig, saveConfig, clampPage, clampDays } from "../src/config.ts";
 import { getSessionDir } from "../src/session-dir.ts";
-import { rankTarget, navTarget, parseRankFlag, type Hidden } from "../src/nav.ts";
+import { rankTarget, navTarget, sortByCreated, parseRankFlag, type Hidden } from "../src/nav.ts";
 import { buildPickerItems, resolveChoice } from "../src/picker.ts";
 import { markActive, unmarkActive, activeElsewhere } from "../src/active.ts";
 import { findLegacyForks, migrateLegacyForks } from "../src/migrate.ts";
@@ -214,7 +214,9 @@ export default function (pi: ExtensionAPI) {
 
         const currentFile = ctx.sessionManager.getSessionFile() ?? undefined;
         const hidden = await hiddenPredicate();
-        const { target, pos, total } = await navTarget(files, currentFile, dir, hidden);
+        // Walk by creation time: resuming bumps mtime, which would reshuffle
+        // an mtime-ordered walk into a ping-pong between two sessions.
+        const { target, pos, total } = await navTarget(sortByCreated(files), currentFile, dir, hidden);
 
         if (!target) {
           ctx.ui.notify(edge, "info");
