@@ -328,8 +328,8 @@ describe("Phase 9: Picker resolves duplicate labels to distinct sessions", () =>
   it("nav functions step relative to current session", async () => {
     const { navTarget, rankTarget } = await import("../../src/nav.ts");
     const files = [{ file: "/s/new" }, { file: "/s/mid" }, { file: "/s/old" }];
-    assert.equal(navTarget(files, "/s/mid", 1).target?.file, "/s/old");
-    assert.equal(navTarget(files, "/s/mid", -1).target?.file, "/s/new");
-    assert.equal(rankTarget(files, "/s/new", 1).target?.file, "/s/mid");
+    assert.equal((await navTarget(files, "/s/mid", 1)).target?.file, "/s/old");
+    assert.equal((await navTarget(files, "/s/mid", -1)).target?.file, "/s/new");
+    assert.equal((await rankTarget(files, "/s/new", 1)).target?.file, "/s/mid");
   });
 });
