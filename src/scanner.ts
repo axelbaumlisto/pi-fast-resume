@@ -223,6 +223,7 @@ export async function scanPage(
   maxDays?: number,
   excludeFile?: string,
   onError?: (message: string) => void,
+  hidden?: (f: StatResult) => Promise<boolean>,
 ): Promise<{ entries: SessionEntry[]; total: number; hasMore: boolean }> {
   const all = await statScan(sessionDir, onError);
 
@@ -234,6 +235,12 @@ export async function scanPage(
 
   if (excludeFile) {
     filtered = filtered.filter((f) => f.file !== excludeFile);
+  }
+
+  if (hidden) {
+    const kept: StatResult[] = [];
+    for (const f of filtered) if (!(await hidden(f))) kept.push(f);
+    filtered = kept;
   }
 
   const total = filtered.length;

@@ -2,10 +2,10 @@
  * pi-fast-resume — fast session resume without reading all .jsonl files.
  *
  * Commands:
- *   /r1 .. /r5       — instantly switch to the N-th most recent session
- *                      (stat-only; /r1 = latest, /r5 = 5th, current excluded)
+ *   /r1 .. /r2       — instantly switch to the N-th most recent session
+ *                      (stat-only; /r1 = latest, /r2 = 2nd, current excluded)
  *   pi --r N         — same as /rN but at startup (pi --r 1 = resume latest)
- *   pi --r1 .. --r5  — boolean form of the same (pi --r1 = resume latest)
+ *   pi --r1 .. --r2  — boolean form of the same (pi --r1 = resume latest)
  *   pi --rn          — alias for --r1 (mirrors /rn from a fresh session)
  *   /rn / /rp        — step to the next (older) / previous (newer) session
  *                      relative to the current one (by mtime)
@@ -14,6 +14,10 @@
  *   /rs set days N   — set maxDays filter (0-30, 0 = no limit)
  *   /rds             — delete all subagent session trees for the current project
  *                      (asks for confirmation; top-level sessions untouched)
+ *
+ * All navigation skips (a) subagent fork sessions left loose in the sessions
+ * dir by older pi-subagents and (b) sessions currently open in another live
+ * pi process. See src/hidden.ts and src/active.ts.
  */
 
 import type {
@@ -32,13 +36,15 @@ import {
 import { formatEntry, truncate, sessionLabel, formatSize } from "../src/format.ts";
 import { loadConfig, saveConfig, clampPage, clampDays } from "../src/config.ts";
 import { getSessionDir } from "../src/session-dir.ts";
-import { rankTarget, navTarget, parseRankFlag } from "../src/nav.ts";
+import { rankTarget, navTarget, parseRankFlag, type Hidden } from "../src/nav.ts";
 import { buildPickerItems, resolveChoice } from "../src/picker.ts";
+import { isSubagentFork, pruneForkCache, type StatRef } from "../src/hidden.ts";
+import { markActive, unmarkActive, activeElsewhere } from "../src/active.ts";
 
 const DAY_TIERS = [7, 14, 0] as const;
 
 // How many ranked instant-resume commands to register: /r1 .. /rN.
-const MAX_RANK = 5;
+const MAX_RANK = 2;
 
 const ordinal = (n: number): string => {
   if (n === 1) return "most recent";
@@ -52,6 +58,17 @@ const scanErrorNotifier = (ctx: ExtensionContext) => (message: string) =>
 
 const sessionDirFor = (ctx: ExtensionContext): string =>
   getSessionDir(ctx.cwd, ctx.sessionManager.getSessionFile() ?? undefined);
+
+/**
+ * Build the hidden-file predicate for one navigation call: sessions open in
+ * another live pi + subagent fork sessions. The active set is read once per
+ * call (one readdir); fork detection is lazy and disk-cached.
+ */
+async function hiddenPredicate(sessionDir: string, files: StatRef[]): Promise<Hidden<StatRef>> {
+  const elsewhere = await activeElsewhere();
+  void pruneForkCache(sessionDir, new Set(files.map((f) => f.file)));
+  return async (f) => elsewhere.has(f.file) || (await isSubagentFork(f));
+}
 
 /** Switch to a session file with a "Resumed: <label>" notice. */
 async function switchTo(
@@ -92,7 +109,8 @@ async function resumeRank(rank: number, baseCtx: ExtensionContext): Promise<void
   }
 
   const currentFile = ctx.sessionManager.getSessionFile() ?? undefined;
-  const { target, othersCount } = rankTarget(files, currentFile, rank);
+  const hidden = await hiddenPredicate(sessionDirFor(ctx), files);
+  const { target, othersCount } = await rankTarget(files, currentFile, rank, hidden);
 
   if (!target) {
     ctx.ui.notify(
@@ -116,7 +134,7 @@ export default function (pi: ExtensionAPI) {
     });
   }
 
-  // Startup flags: pi --r N, pi --r1 .. --r5, pi --rn (alias for --r1).
+  // Startup flags: pi --r N, pi --r1 .. --r2, pi --rn (alias for --r1).
   pi.registerFlag("r", {
     description: `Resume the N-th most recent session at startup (1-${MAX_RANK}, 1 = latest)`,
     type: "string",
@@ -150,9 +168,16 @@ export default function (pi: ExtensionAPI) {
   };
 
   pi.on("session_start", async (event: SessionStartEvent, ctx) => {
+    // Advertise which session this pi holds so other instances skip it.
+    await markActive(ctx.sessionManager.getSessionFile() ?? undefined);
     if (event.reason !== "startup") return;
     const rank = startupRank(ctx);
     if (rank !== undefined) await resumeRank(rank, ctx);
+  });
+
+  // Fires on switch (followed by session_start) and on exit.
+  pi.on("session_shutdown", async () => {
+    await unmarkActive();
   });
 
   // /rn — step to the next OLDER session; /rp — step to the next NEWER one.
@@ -172,7 +197,8 @@ export default function (pi: ExtensionAPI) {
         }
 
         const currentFile = ctx.sessionManager.getSessionFile() ?? undefined;
-        const { target, pos, total } = navTarget(files, currentFile, dir);
+        const hidden = await hiddenPredicate(sessionDirFor(ctx), files);
+        const { target, pos, total } = await navTarget(files, currentFile, dir, hidden);
 
         if (!target) {
           ctx.ui.notify(edge, "info");
@@ -271,6 +297,7 @@ export default function (pi: ExtensionAPI) {
       const sessionDir = sessionDirFor(ctx);
       const currentFile = ctx.sessionManager.getSessionFile() ?? undefined;
       const onError = scanErrorNotifier(ctx);
+      const hidden = await hiddenPredicate(sessionDir, await statScan(sessionDir));
 
       let tierIndex = 0;
       let offset = 0;
@@ -286,6 +313,7 @@ export default function (pi: ExtensionAPI) {
           currentDays > 0 ? currentDays : undefined,
           currentFile,
           onError,
+          hidden,
         );
 
         if (entries.length === 0 && offset === 0) {

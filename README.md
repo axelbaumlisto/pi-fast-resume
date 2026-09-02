@@ -12,8 +12,8 @@ Commands that use `stat()` + lazy partial reads:
 
 | Command | What it does | Speed |
 |---------|-------------|-------|
-| `/r1` … `/r5` | Instantly switch to the N-th most recent session (`/r1` = latest) | <50ms (stat-only) |
-| `pi --r N` / `--r1`…`--r5` / `--rn` | Startup flag: open pi and immediately resume the N-th most recent session | <50ms (stat-only) |
+| `/r1` / `/r2` | Instantly switch to the latest / 2nd most recent session | <50ms (stat-only) |
+| `pi --r N` / `--r1` / `--r2` / `--rn` | Startup flag: open pi and immediately resume the N-th most recent session | <50ms (stat-only) |
 | `/rn` / `/rp` | Step to the next (older) / previous (newer) session relative to the current one | <50ms (stat-only) |
 | `/rs` | Paginated picker: last 20, with tier navigation | <200ms first page |
 | `/rds` | Delete subagent session trees for the current project (with confirmation) | — |
@@ -26,13 +26,16 @@ pi install npm:pi-fast-resume
 
 ## Commands
 
-### `/r1` … `/r5` — Instant Ranked Resume
+### `/r1` / `/r2` — Instant Ranked Resume
 
 Switch to the N-th most recent session (by mtime) in one step. No picker, no parsing.
 
 - `/r1` — most recent session
 - `/r2` — 2nd most recent
-- … up to `/r5` — 5th most recent
+
+For anything further back use `/rn` / `/rp` — the rank changes every time you
+switch (the current session is excluded), so deep ranks are more confusing
+than stepping.
 
 The current session is always excluded from the ranking, so `/r1` reliably jumps
 to the previous session. If fewer sessions exist than the requested rank, a
@@ -40,16 +43,16 @@ notice is shown and nothing is switched.
 
 ### `pi --r N` — Resume at Startup
 
-Start pi and immediately switch to the N-th most recent session (1-5):
+Start pi and immediately switch to the N-th most recent session (1-2):
 
 ```bash
 pi --r1    # open pi in the latest session
 pi --rn    # same (alias for --r1)
-pi --r3    # open pi in the 3rd most recent
-pi --r 3   # same, numeric form
+pi --r2    # open pi in the 2nd most recent
+pi --r 2   # same, numeric form
 ```
 
-Same ranking as `/r1`…`/r5`. Invalid values show an error and start a normal
+Same ranking as `/r1`/`/r2`. Invalid values show an error and start a normal
 new session. Interactive mode only (ignored with `-p`).
 
 ### `/rn` / `/rp` — Step Navigation
@@ -94,14 +97,31 @@ by hundreds of MB.
 `/rds` scans the **current project only**, shows how many trees / runs / MB
 would be freed, asks for **confirmation**, then recursively deletes just those
 subagent tree subdirectories. Your real top-level `*.jsonl` sessions (the ones
-`/r1`…`/r5` and `/rs` list) are never touched.
+`/r1`/`/r2` and `/rs` list) are never touched.
+
+### What is hidden from every list
+
+All commands (`/r1`, `/r2`, `/rn`, `/rp`, `/rs`, `--r`) silently skip:
+
+- **Sessions open in another running pi.** Each pi instance with this extension
+  records its current session file in
+  `~/.pi/agent/extensions/pi-fast-resume/active/<pid>.json` (removed on exit;
+  dead pids are ignored). So `/rn` in one terminal never lands on the chat you
+  have open in another one.
+- **Subagent fork sessions.** pi-subagents < 0.53 stored forked child sessions
+  loose in the project sessions dir, indistinguishable by filename from your own
+  `/fork`s. They are detected by the delegated-task prompt / `subagent-*` session
+  name. Only files with a `parentSession` header are ever inspected, lazily
+  (just the candidates being walked), and the verdict is cached on disk in
+  `fork-cache.json` keyed by mtime+size — each file is scanned at most once.
 
 ## How it works
 
-1. **`/r1`…`/r5`**: `readdir` → `stat` each `.jsonl` → sort by mtime → exclude current → `switchSession(others[rank-1])`
+1. **`/r1`/`/r2`**: `readdir` → `stat` each `.jsonl` → sort by mtime → exclude current + hidden → `switchSession(others[rank-1])`
 2. **`/rs`**: Same stat scan, then read only the **first ~50 lines** of each file on the current page to extract session name and first user message
 
-No full file parsing. No `buildSessionInfo()`. No reading message content beyond the first user message.
+No full file parsing. No `buildSessionInfo()`. No reading message content beyond the first user message
+(except the one-time, cached subagent-fork check described above).
 
 ## Development
 
