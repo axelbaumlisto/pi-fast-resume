@@ -49,7 +49,7 @@ describe("formatEntry", () => {
     const entry = { file: "/tmp/x.jsonl", mtime: new Date(Date.now() - 86400_000), size: 150 * 1024 * 1024, name: "Полностью обновлён HANDOFF.md — 423 строки, детали и прочее длинное название сессии" };
     for (const width of [60, 80, 120]) {
       const result = formatEntry(entry, width);
-      assert.ok(result.length <= width - 6, `width ${width}: row ${result.length} > ${width - 6}`);
+      assert.ok(result.length <= width - 10, `width ${width}: row ${result.length} > ${width - 10}`);
     }
   });
 
@@ -64,6 +64,6 @@ describe("formatEntry", () => {
 
   it("defaults to 80 columns", () => {
     const entry = { file: "/tmp/x.jsonl", mtime: new Date(), size: 0, name: "x".repeat(200) };
-    assert.ok(formatEntry(entry).length <= 74);
+    assert.ok(formatEntry(entry).length <= 70);
   });
 });

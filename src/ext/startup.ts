@@ -12,6 +12,9 @@ import { currentSessionFile, sessionDirFor } from "./context.ts";
 import { MAX_RANK, ordinal } from "./resume.ts";
 import { MSG } from "./messages.ts";
 
+/** Upper bound on waiting for the provider refresh before resuming anyway. */
+const REFRESH_WAIT_MAX_MS = 15_000;
+
 export type FlagReader = (name: string) => unknown;
 
 /**
@@ -62,9 +65,10 @@ async function resumeAtStartup(pi: ExtensionAPI, ctx: ExtensionContext): Promise
   // dispatch our own slash command to run with a command context. Switching
   // while a provider refresh is in flight aborts it and crashes pi (uncaught
   // AbortError from the provider), so let the refresh finish first.
-  try {
-    await ctx.modelRegistry.refresh();
-  } catch {}
+  await Promise.race([
+    ctx.modelRegistry.refresh().catch(() => {}),
+    new Promise((r) => setTimeout(r, REFRESH_WAIT_MAX_MS)),
+  ]);
   pi.sendUserMessage(`/r${wanted.rank}`, { expandPromptTemplates: true });
 }
 

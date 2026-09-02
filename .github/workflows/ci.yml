@@ -40,3 +40,22 @@ jobs:
 
       - name: Run e2e tests
         run: docker run --rm pi-fast-resume-e2e
+
+  tui:
+    # Real pi TUI driven through tmux (tests/tui). No API key needed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install tmux
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq tmux
+
+      - name: Install dependencies (provides pi via devDependencies)
+        run: npm ci --ignore-scripts
+
+      - name: Interactive TUI tests
+        run: npm run test:tui

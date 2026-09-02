@@ -72,8 +72,9 @@ in time instead of recalculating ranks.
 `/rn` / `/rp` walk by **creation time** (the timestamp in the session filename),
 not by mtime: resuming a session makes extensions append to it, which bumps its
 mtime and would otherwise reshuffle the list into a ping-pong between two
-sessions. `/r1` and `/rs` still rank by last activity (mtime). A `(pos/total)` indicator is shown on
-each switch. At the ends of the list a notice is shown and nothing is switched.
+sessions. `/r1` and `/rs` still rank by last activity (mtime). The footer status
+shows your position (`session 3/80`) after each step. At the ends of the list a
+notice is shown and nothing is switched.
 
 ### `/rs` — Smart Resume
 
@@ -153,3 +154,11 @@ npm test
 ## License
 
 MIT
+
+## Development
+
+```bash
+npm test          # unit tests (pure modules)
+npm run test:tui  # interactive e2e: real pi TUI in tmux, isolated agent dir (needs tmux)
+docker build -f tests/e2e/Dockerfile -t e2e . && docker run --rm e2e   # install/CLI e2e
+```

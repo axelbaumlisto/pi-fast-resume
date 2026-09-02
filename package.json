@@ -1,7 +1,7 @@
 {
   "name": "pi-resume",
-  "version": "1.4.0",
-  "description": "Fast session resume for pi coding agent — /r1,/r2 ranked resume, /rn and /rp step navigation, pi --r1/--rn startup flags, /rs paginated picker, /rds subagent session cleanup; skips sessions open in other pi instances, tidies legacy subagent forks",
+  "version": "1.5.0",
+  "description": "Fast session resume for pi coding agent \u2014 /r1,/r2 ranked resume, /rn and /rp step navigation, pi --r1/--rn startup flags, /rs paginated picker, /rds subagent session cleanup; skips sessions open in other pi instances, tidies legacy subagent forks",
   "type": "module",
   "license": "MIT",
   "keywords": [
@@ -19,6 +19,7 @@
     "extensions",
     "src",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "pi": {
@@ -42,6 +43,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-vm-modules --test tests/*.test.ts",
     "check": "npm run typecheck && npm pack --dry-run",
-    "prepublishOnly": "npm run check"
+    "prepublishOnly": "npm run check",
+    "test:tui": "node --experimental-vm-modules --test tests/tui/tui.test.ts"
   }
 }

@@ -34,11 +34,12 @@ export function sessionLabel(e: SessionEntry): string {
  * Reserves space for the age/size columns and the picker's cursor/indent
  * so rows never wrap (wrapped rows break selection navigation in the TUI).
  */
-// Columns the TUI select list draws around each row (cursor arrow, indent,
-// uniquify suffix like " (12)"). Keeping rows shorter than
-// terminal width minus this margin prevents line wrapping, which would
-// break cursor navigation in the picker.
-const PICKER_ROW_MARGIN = 6;
+// Columns reserved at the end of each picker row: the select component's
+// cursor/indent (~4) plus the uniquify suffix " (NN)" (5) that
+// buildPickerItems() may append to duplicate rows. Rows longer than the
+// terminal width either wrap (breaking cursor navigation) or get clipped by
+// the component (hiding the suffix), so the label is truncated to fit.
+const PICKER_ROW_MARGIN = 10;
 
 /** Label marker for a session currently open in another pi process. */
 export const OPEN_ELSEWHERE_MARK = "⦿ ";
