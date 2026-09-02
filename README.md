@@ -103,8 +103,10 @@ subagent tree subdirectories. Your real top-level `*.jsonl` sessions (the ones
 
 Each pi instance with this extension records its current session file in
 `~/.pi/agent/extensions/pi-fast-resume/active/<pid>.json` (removed on exit;
-dead pids are ignored). `/r1`, `/r2`, `/rn`, `/rp`, `/rs` and `--r` never land
-on a chat you have open in another terminal.
+dead or reused pids are ignored). `/r1`, `/r2`, `/rn`, `/rp` and `--r` never
+land on a chat you have open in another terminal. `/rs` still lists such
+sessions, marked with `⦿`, so you can see where a chat went — selecting one is
+refused instead of hijacking the other instance.
 
 ### Legacy subagent forks are tidied up once
 
@@ -114,11 +116,14 @@ sessions dir — same filename shape and `parentSession` header as your own
 the canonical place is `<parent>/forks/<file>.jsonl`.
 
 On startup this extension moves such files there (detached, in the background,
-one time per file). A file is moved only if it has a `parentSession` header
-**and** contains the delegated-subagent task prompt or a `subagent-*` session
-name; manual `/fork`s are untouched. The current session and sessions open in
-other pi instances are skipped; existing targets are never overwritten. After
-that, nothing needs filtering and every command is stat-only again.
+one time per file). A file is moved only if **all** hold: it was created before
+the fix (2026-08-20), it has a `parentSession` header, it contains the
+delegated-subagent task prompt, and **no human message follows the last task
+prompt** (only orchestrator follow-ups such as steering). That last rule keeps
+manual `/fork`s safe even when their inherited history contains a subagent task.
+The current session and sessions open in other pi instances are skipped;
+existing targets are never overwritten. After that, nothing needs filtering and
+every command is stat-only again.
 
 ## How it works
 

@@ -30,6 +30,25 @@ describe("active registry", () => {
     await unmarkActive();
   });
 
+  it("live pid reused by a different executable is ignored and deleted", async () => {
+    mkdirSync(ACTIVE, { recursive: true });
+    // pid 1 (launchd/init) is always alive but is not our executable.
+    const path = join(ACTIVE, "1.json");
+    writeFileSync(path, JSON.stringify({ file: "/s/reused.jsonl", exe: "node" }));
+    const set = await activeElsewhere();
+    assert.equal(set.has("/s/reused.jsonl"), false);
+    assert.equal(existsSync(path), false);
+  });
+
+  it("legacy record without exe is trusted while pid is alive", async () => {
+    mkdirSync(ACTIVE, { recursive: true });
+    const path = join(ACTIVE, "1.json");
+    writeFileSync(path, JSON.stringify({ file: "/s/legacy.jsonl" }));
+    const set = await activeElsewhere();
+    assert.equal(set.has("/s/legacy.jsonl"), true);
+    rmSync(path);
+  });
+
   it("dead pid record is ignored and deleted", async () => {
     mkdirSync(ACTIVE, { recursive: true });
     const deadPid = 2_000_000_000; // above any real pid range

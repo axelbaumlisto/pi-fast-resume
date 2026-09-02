@@ -40,8 +40,12 @@ export function sessionLabel(e: SessionEntry): string {
 // break cursor navigation in the picker.
 const PICKER_ROW_MARGIN = 6;
 
-export function formatEntry(e: SessionEntry, maxWidth = 80): string {
+/** Label marker for a session currently open in another pi process. */
+export const OPEN_ELSEWHERE_MARK = "⦿ ";
+
+export function formatEntry(e: SessionEntry, maxWidth = 80, openElsewhere = false): string {
   const prefix = `${formatAge(e.mtime).padEnd(10)} ${formatSize(e.size).padEnd(8)} `;
-  const labelMax = Math.max(10, maxWidth - prefix.length - PICKER_ROW_MARGIN);
-  return prefix + truncate(sessionLabel(e), labelMax);
+  const mark = openElsewhere ? OPEN_ELSEWHERE_MARK : "";
+  const labelMax = Math.max(10, maxWidth - prefix.length - mark.length - PICKER_ROW_MARGIN);
+  return prefix + mark + truncate(sessionLabel(e), labelMax);
 }

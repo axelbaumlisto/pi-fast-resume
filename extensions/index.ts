@@ -313,7 +313,10 @@ export default function (pi: ExtensionAPI) {
       const sessionDir = sessionDirFor(ctx);
       const currentFile = ctx.sessionManager.getSessionFile() ?? undefined;
       const onError = scanErrorNotifier(ctx);
-      const hidden = await hiddenPredicate();
+      // The picker SHOWS sessions open in another pi (marked) instead of hiding
+      // them, so the user can see where a "missing" chat went; selecting one is
+      // refused rather than hijacking the other instance's session.
+      const elsewhere = await activeElsewhere();
 
       let tierIndex = 0;
       let offset = 0;
@@ -329,7 +332,6 @@ export default function (pi: ExtensionAPI) {
           currentDays > 0 ? currentDays : undefined,
           currentFile,
           onError,
-          hidden,
         );
 
         if (entries.length === 0 && offset === 0) {
@@ -343,7 +345,7 @@ export default function (pi: ExtensionAPI) {
 
         const termWidth = process.stdout.columns || 80;
         const items = buildPickerItems(
-          entries.map((e) => formatEntry(e, termWidth)),
+          entries.map((e) => formatEntry(e, termWidth, elsewhere.has(e.file))),
           {
             remaining: hasMore ? total - offset - entries.length : undefined,
             nextTierLabel:
@@ -368,6 +370,10 @@ export default function (pi: ExtensionAPI) {
           case "entry": {
             const selected = entries[action.index];
             if (!selected) return;
+            if (elsewhere.has(selected.file)) {
+              ctx.ui.notify("That session is open in another pi — not switching", "info");
+              continue;
+            }
             const result = await ctx.switchSession(selected.file, {
               withSession: async (newCtx) => {
                 newCtx.ui.notify(`Resumed: ${truncate(sessionLabel(selected), 50)}`, "info");

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import { strict as assert } from "node:assert";
-import { formatSize, formatAge, truncate, sessionLabel, formatEntry } from "../src/format.ts";
+import { formatSize, formatAge, truncate, sessionLabel, formatEntry, OPEN_ELSEWHERE_MARK } from "../src/format.ts";
 
 describe("formatSize", () => {
   it("formats bytes", () => assert.equal(formatSize(500), "500B"));
@@ -51,6 +51,15 @@ describe("formatEntry", () => {
       const result = formatEntry(entry, width);
       assert.ok(result.length <= width - 6, `width ${width}: row ${result.length} > ${width - 6}`);
     }
+  });
+
+  it("marks sessions open in another pi and still fits the width", () => {
+    const entry = { file: "/tmp/x.jsonl", mtime: new Date(), size: 10, name: "x".repeat(200) };
+    const plain = formatEntry(entry, 80);
+    const marked = formatEntry(entry, 80, true);
+    assert.ok(!plain.includes(OPEN_ELSEWHERE_MARK));
+    assert.ok(marked.includes(OPEN_ELSEWHERE_MARK));
+    assert.equal(marked.length, plain.length);
   });
 
   it("defaults to 80 columns", () => {
