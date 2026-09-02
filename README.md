@@ -99,29 +99,33 @@ would be freed, asks for **confirmation**, then recursively deletes just those
 subagent tree subdirectories. Your real top-level `*.jsonl` sessions (the ones
 `/r1`/`/r2` and `/rs` list) are never touched.
 
-### What is hidden from every list
+### Sessions open in another pi are skipped
 
-All commands (`/r1`, `/r2`, `/rn`, `/rp`, `/rs`, `--r`) silently skip:
+Each pi instance with this extension records its current session file in
+`~/.pi/agent/extensions/pi-fast-resume/active/<pid>.json` (removed on exit;
+dead pids are ignored). `/r1`, `/r2`, `/rn`, `/rp`, `/rs` and `--r` never land
+on a chat you have open in another terminal.
 
-- **Sessions open in another running pi.** Each pi instance with this extension
-  records its current session file in
-  `~/.pi/agent/extensions/pi-fast-resume/active/<pid>.json` (removed on exit;
-  dead pids are ignored). So `/rn` in one terminal never lands on the chat you
-  have open in another one.
-- **Subagent fork sessions.** pi-subagents < 0.53 stored forked child sessions
-  loose in the project sessions dir, indistinguishable by filename from your own
-  `/fork`s. They are detected by the delegated-task prompt / `subagent-*` session
-  name. Only files with a `parentSession` header are ever inspected, lazily
-  (just the candidates being walked), and the verdict is cached on disk in
-  `fork-cache.json` keyed by mtime+size — each file is scanned at most once.
+### Legacy subagent forks are tidied up once
+
+pi-subagents < 0.53 stored forked child sessions **loose** in the project
+sessions dir — same filename shape and `parentSession` header as your own
+`/fork`s, so they polluted `/resume` and every navigation command. Since 0.53
+the canonical place is `<parent>/forks/<file>.jsonl`.
+
+On startup this extension moves such files there (detached, in the background,
+one time per file). A file is moved only if it has a `parentSession` header
+**and** contains the delegated-subagent task prompt or a `subagent-*` session
+name; manual `/fork`s are untouched. The current session and sessions open in
+other pi instances are skipped; existing targets are never overwritten. After
+that, nothing needs filtering and every command is stat-only again.
 
 ## How it works
 
-1. **`/r1`/`/r2`**: `readdir` → `stat` each `.jsonl` → sort by mtime → exclude current + hidden → `switchSession(others[rank-1])`
+1. **`/r1`/`/r2`**: `readdir` → `stat` each `.jsonl` → sort by mtime → exclude current + open elsewhere → `switchSession(others[rank-1])`
 2. **`/rs`**: Same stat scan, then read only the **first ~50 lines** of each file on the current page to extract session name and first user message
 
-No full file parsing. No `buildSessionInfo()`. No reading message content beyond the first user message
-(except the one-time, cached subagent-fork check described above).
+No full file parsing. No `buildSessionInfo()`. No reading message content beyond the first user message.
 
 ## Development
 

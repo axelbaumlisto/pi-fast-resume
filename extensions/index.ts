@@ -15,9 +15,10 @@
  *   /rds             — delete all subagent session trees for the current project
  *                      (asks for confirmation; top-level sessions untouched)
  *
- * All navigation skips (a) subagent fork sessions left loose in the sessions
- * dir by older pi-subagents and (b) sessions currently open in another live
- * pi process. See src/hidden.ts and src/active.ts.
+ * All navigation skips sessions currently open in another live pi process
+ * (src/active.ts). At startup, legacy subagent fork sessions left loose by
+ * pi-subagents < 0.53 are moved once into `<parent>/forks/` (src/migrate.ts),
+ * so afterwards nothing needs filtering and every command stays stat-only.
  */
 
 import type {
@@ -38,8 +39,8 @@ import { loadConfig, saveConfig, clampPage, clampDays } from "../src/config.ts";
 import { getSessionDir } from "../src/session-dir.ts";
 import { rankTarget, navTarget, parseRankFlag, type Hidden } from "../src/nav.ts";
 import { buildPickerItems, resolveChoice } from "../src/picker.ts";
-import { isSubagentFork, pruneForkCache, type StatRef } from "../src/hidden.ts";
 import { markActive, unmarkActive, activeElsewhere } from "../src/active.ts";
+import { findLegacyForks, migrateLegacyForks } from "../src/migrate.ts";
 
 const DAY_TIERS = [7, 14, 0] as const;
 
@@ -59,15 +60,29 @@ const scanErrorNotifier = (ctx: ExtensionContext) => (message: string) =>
 const sessionDirFor = (ctx: ExtensionContext): string =>
   getSessionDir(ctx.cwd, ctx.sessionManager.getSessionFile() ?? undefined);
 
-/**
- * Build the hidden-file predicate for one navigation call: sessions open in
- * another live pi + subagent fork sessions. The active set is read once per
- * call (one readdir); fork detection is lazy and disk-cached.
- */
-async function hiddenPredicate(sessionDir: string, files: StatRef[]): Promise<Hidden<StatRef>> {
+/** Hidden-file predicate: sessions open in another live pi (one readdir). */
+async function hiddenPredicate(): Promise<Hidden<{ file: string }>> {
   const elsewhere = await activeElsewhere();
-  void pruneForkCache(sessionDir, new Set(files.map((f) => f.file)));
-  return async (f) => elsewhere.has(f.file) || (await isSubagentFork(f));
+  return async (f) => elsewhere.has(f.file);
+}
+
+/**
+ * Move legacy loose subagent forks into `<parent>/forks/`. Runs detached in
+ * the background at startup; only reports when something actually moved.
+ * Skips the current session and sessions held by other live pi processes.
+ */
+async function migrateForksInBackground(ctx: ExtensionContext): Promise<void> {
+  const sessionDir = sessionDirFor(ctx);
+  const files = await statScan(sessionDir);
+  const skip = await activeElsewhere();
+  const current = ctx.sessionManager.getSessionFile();
+  if (current) skip.add(current);
+  const forks = await findLegacyForks(files, skip);
+  if (forks.length === 0) return;
+  const moved = await migrateLegacyForks(forks);
+  if (moved > 0) {
+    ctx.ui.notify(`Moved ${moved} legacy subagent fork session${moved === 1 ? "" : "s"} into <parent>/forks/`, "info");
+  }
 }
 
 /** Switch to a session file with a "Resumed: <label>" notice. */
@@ -109,7 +124,7 @@ async function resumeRank(rank: number, baseCtx: ExtensionContext): Promise<void
   }
 
   const currentFile = ctx.sessionManager.getSessionFile() ?? undefined;
-  const hidden = await hiddenPredicate(sessionDirFor(ctx), files);
+  const hidden = await hiddenPredicate();
   const { target, othersCount } = await rankTarget(files, currentFile, rank, hidden);
 
   if (!target) {
@@ -171,6 +186,7 @@ export default function (pi: ExtensionAPI) {
     // Advertise which session this pi holds so other instances skip it.
     await markActive(ctx.sessionManager.getSessionFile() ?? undefined);
     if (event.reason !== "startup") return;
+    void migrateForksInBackground(ctx).catch(() => {});
     const rank = startupRank(ctx);
     if (rank !== undefined) await resumeRank(rank, ctx);
   });
@@ -197,7 +213,7 @@ export default function (pi: ExtensionAPI) {
         }
 
         const currentFile = ctx.sessionManager.getSessionFile() ?? undefined;
-        const hidden = await hiddenPredicate(sessionDirFor(ctx), files);
+        const hidden = await hiddenPredicate();
         const { target, pos, total } = await navTarget(files, currentFile, dir, hidden);
 
         if (!target) {
@@ -297,7 +313,7 @@ export default function (pi: ExtensionAPI) {
       const sessionDir = sessionDirFor(ctx);
       const currentFile = ctx.sessionManager.getSessionFile() ?? undefined;
       const onError = scanErrorNotifier(ctx);
-      const hidden = await hiddenPredicate(sessionDir, await statScan(sessionDir));
+      const hidden = await hiddenPredicate();
 
       let tierIndex = 0;
       let offset = 0;
