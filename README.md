@@ -55,6 +55,10 @@ pi --r 2   # same, numeric form
 Same ranking as `/r1`/`/r2`. Invalid values show an error and start a normal
 new session. Interactive mode only (ignored with `-p`).
 
+Under the hood the flag waits for the provider/model refresh to finish and then
+dispatches `/rN` as a command (session switching is only available to commands,
+and switching mid-refresh would abort it).
+
 ### `/rn` / `/rp` — Step Navigation
 
 Walk the mtime-sorted session list relative to the **current** session:

@@ -188,7 +188,19 @@ export default function (pi: ExtensionAPI) {
     if (event.reason !== "startup") return;
     void migrateForksInBackground(ctx).catch(() => {});
     const rank = startupRank(ctx);
-    if (rank !== undefined) await resumeRank(rank, ctx);
+    if (rank === undefined) return;
+    if (!ctx.hasUI) {
+      ctx.ui.notify("--r/--rn: session resume needs interactive mode", "error");
+      return;
+    }
+    // session_start only gets a plain ExtensionContext (no switchSession);
+    // dispatch our own slash command so it runs with a command context.
+    // Switching while a provider refresh is in flight aborts it and crashes
+    // pi (uncaught AbortError from the provider), so wait for it to settle.
+    try {
+      await ctx.modelRegistry.refresh();
+    } catch {}
+    pi.sendUserMessage(`/r${rank}`, { expandPromptTemplates: true });
   });
 
   // Fires on switch (followed by session_start) and on exit.
