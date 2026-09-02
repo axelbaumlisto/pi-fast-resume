@@ -52,3 +52,36 @@ export function saveConfig(cfg: Config): string | undefined {
     return `Failed to save config: ${err instanceof Error ? err.message : String(err)}`;
   }
 }
+
+/**
+ * Apply `/rs set <key> <value>`. Pure: returns the new config + a message, or
+ * an error string for unknown keys / non-numeric values. Out-of-range values
+ * are clamped and the message says so.
+ */
+export function applySetting(
+  cfg: Config,
+  key: string | undefined,
+  rawValue: string | undefined,
+): { cfg: Config; message: string } | { error: true } {
+  const val = parseInt(rawValue ?? "", 10);
+  if (isNaN(val)) return { error: true };
+
+  if (key === "page") {
+    const pageSize = clampPage(val);
+    return {
+      cfg: { ...cfg, pageSize },
+      message: pageSize === val ? `Page size set to ${val}` : `Page size clamped to ${pageSize} (valid: ${MIN_PAGE}-${MAX_PAGE})`,
+    };
+  }
+  if (key === "days") {
+    const maxDays = clampDays(val);
+    const message =
+      maxDays === 0
+        ? "Day filter disabled"
+        : maxDays === val
+          ? `Max days set to ${val}`
+          : `Max days clamped to ${maxDays} (valid: ${MIN_DAYS}-${MAX_DAYS})`;
+    return { cfg: { ...cfg, maxDays }, message };
+  }
+  return { error: true };
+}
