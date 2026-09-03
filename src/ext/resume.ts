@@ -42,7 +42,7 @@ export async function resumeStep(dir: 1 | -1, ctx: ExtensionCommandContext): Pro
     ctx.ui.notify(dir === 1 ? MSG.atOldest : MSG.atNewest, "info");
     return;
   }
-  await switchTo(ctx, target, (label) => MSG.resumedAt(pos, total, label), `session ${pos}/${total}`);
+  await switchTo(ctx, target, (label) => MSG.resumedAt(pos, total, label));
 }
 
 export function registerResumeCommands(pi: ExtensionAPI): void {

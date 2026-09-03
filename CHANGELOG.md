@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.1
+- Removed the persistent footer status (`session 3/80`) set by `/rn` / `/rp`:
+  it never cleared and cost an extra footer row for the whole session. The
+  position stays in the transient `Resumed (N/M)` notice.
+
 ## 1.5.0
 - `/rn` / `/rp` position is shown in the footer status (`session 3/80`); the
   transient notice was being replaced by pi's own "Resumed session".

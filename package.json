@@ -1,6 +1,6 @@
 {
   "name": "pi-resume",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Fast session resume for pi coding agent \u2014 /r1,/r2 ranked resume, /rn and /rp step navigation, pi --r1/--rn startup flags, /rs paginated picker, /rds subagent session cleanup; skips sessions open in other pi instances, tidies legacy subagent forks",
   "type": "module",
   "license": "MIT",

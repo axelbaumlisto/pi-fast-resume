@@ -54,18 +54,14 @@ export async function switchTo(
   ctx: ExtensionCommandContext,
   target: StatResult,
   announce: (label: string) => string = MSG.resumed,
-  status?: string,
 ): Promise<{ cancelled: boolean }> {
   const meta = await readSessionMeta(target.file, target);
   const label = truncate(sessionLabel(meta), LABEL_MAX);
   return ctx.switchSession(target.file, {
     withSession: async (newCtx) => {
-      // pi's own "Resumed session" notice lands right after ours and replaces
-      // it, so the durable part (position) goes to the footer status instead.
+      // Position lives only in this transient notice — no persistent footer
+      // status line (it cost a whole extra footer row for the entire session).
       newCtx.ui.notify(announce(label), "info");
-      newCtx.ui.setStatus(STATUS_KEY, status);
     },
   });
 }
-
-export const STATUS_KEY = "pi-resume";

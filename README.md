@@ -72,9 +72,9 @@ in time instead of recalculating ranks.
 `/rn` / `/rp` walk by **creation time** (the timestamp in the session filename),
 not by mtime: resuming a session makes extensions append to it, which bumps its
 mtime and would otherwise reshuffle the list into a ping-pong between two
-sessions. `/r1` and `/rs` still rank by last activity (mtime). The footer status
-shows your position (`session 3/80`) after each step. At the ends of the list a
-notice is shown and nothing is switched.
+sessions. `/r1` and `/rs` still rank by last activity (mtime). The resume notice
+shows your position (`Resumed (3/80): …`) after each step. At the ends of the
+list a notice is shown and nothing is switched.
 
 ### `/rs` — Smart Resume
 
