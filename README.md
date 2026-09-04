@@ -13,8 +13,7 @@ Commands that use `stat()` + lazy partial reads:
 | Command | What it does | Speed |
 |---------|-------------|-------|
 | `/r1` / `/r2` | Instantly switch to the latest / 2nd most recent session | <50ms (stat-only) |
-| `pi-r [N]` | Launcher: resolve the N-th most recent session **before** pi starts, then `pi --session <file>` | one pi start, no switch |
-| `pi --r N` / `--r1` / `--r2` / `--rn` | Startup flag: start pi, wait for provider refresh, then switch (slow) | — |
+| `pi -c` (built-in) | Start pi in the most recent session. If another pi already holds it, the extension hops to the most recent free one | native |
 | `/rn` / `/rp` | Step to the next (older) / previous (newer) session relative to the current one | <50ms (stat-only) |
 | `/rs` | Paginated picker: last 20, with tier navigation | <200ms first page |
 | `/rds` | Delete subagent session trees for the current project (with confirmation) | — |
@@ -42,42 +41,19 @@ The current session is always excluded from the ranking, so `/r1` reliably jumps
 to the previous session. If fewer sessions exist than the requested rank, a
 notice is shown and nothing is switched.
 
-### `pi-r [N]` — Resume Before pi Starts (recommended)
+### Resume at startup — use `pi -c`
 
-A tiny zero-dependency launcher. It resolves the N-th most recent session of
-the current project with `stat` only, skips sessions open in another pi, and
-execs `pi --session <file>` — so pi boots **once**, straight into the right
-session. Any extra arguments are passed through to pi.
+pi already does this natively: `pi -c` opens the most recent session of the
+project (stat-only, one initialisation), `pi --session <id>` opens a specific
+one, `pi -r` shows the built-in picker. pi creates the session **before**
+extensions load, so no extension can pick it faster — earlier versions shipped
+`--rn`/`--r1` flags that started a session and then switched; that was slower
+than `pi -c` and has been removed.
 
-```bash
-pi-r          # latest session
-pi-r 2        # 2nd most recent
-pi-r 1 -m opus  # extra args go to pi
-```
-
-Put it on your PATH: `npm i -g pi-resume`, or symlink `bin/pi-r.mjs` from a
-local checkout. `PI_BIN` overrides the pi executable.
-
-### `pi --r N` — Resume at Startup (flag)
-
-Same result via an extension flag, but pi first boots a fresh session, waits
-for the provider refresh to finish (switching mid-refresh crashes pi; up to
-15 s), then switches and re-initialises extensions. Noticeably slower — prefer
-`pi-r`, which has none of these steps.
-
-```bash
-pi --r1    # open pi in the latest session
-pi --rn    # same (alias for --r1)
-pi --r2    # open pi in the 2nd most recent
-pi --r 2   # same, numeric form
-```
-
-Invalid values show an error and start a normal new session. Interactive mode
-only (ignored with `-p`).
-
-Under the hood the flag waits for the provider/model refresh to finish and then
-dispatches `/rN` as a command (session switching is only available to commands,
-and switching mid-refresh would abort it).
+What `pi -c` cannot know is whether that session is already open in another pi
+(two terminals, same project). This extension checks the shared registry on
+startup and, if `-c` landed in a busy session, hops to the most recent free one
+(`/r1`). With `--session <id>` you asked for that exact file, so no hop.
 
 ### `/rn` / `/rp` — Step Navigation
 

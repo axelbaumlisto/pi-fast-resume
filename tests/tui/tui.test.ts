@@ -16,17 +16,17 @@ const byMtimeExcluding = (all: Fixture[], current: Fixture) =>
 
 const skip = !tmuxAvailable();
 
-describe("TUI: step navigation and startup flag", { skip }, () => {
+describe("TUI: step navigation and pi -c", { skip }, () => {
   const t = new PiTui(80, 30);
   let s: Fixture[];
   before(() => {
     // Creation order s1 < s2 < s3 < s4; mtimes match. s4 is newest.
     s = [1, 2, 3, 4].map((d) => t.session(d, `fixture session ${d}`));
-    t.start(["--rn"]);
+    t.start(["-c"]);
   });
   after(() => t.stop());
 
-  it("pi --rn opens the most recent session", async () => {
+  it("pi -c opens the most recent session", async () => {
     await t.waitForSession(s[3]!, 60_000);
   });
 
@@ -49,9 +49,9 @@ describe("TUI: step navigation and startup flag", { skip }, () => {
     await t.cmd("/rp"); await t.waitForSession(s[3]!);
   });
 
-  it("footer shows position status after a step", async () => {
+  it("step notice shows position (no persistent footer row)", async () => {
     await t.cmd("/rn"); await t.waitForSession(s[2]!);
-    await t.waitForText(/session 2\/4/);
+    await t.waitForText(/Resumed \(2\/4\)/);
     await t.cmd("/rp"); await t.waitForSession(s[3]!);
   });
 

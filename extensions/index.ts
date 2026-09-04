@@ -4,9 +4,6 @@
  * Commands:
  *   /r1 .. /r2       — instantly switch to the N-th most recent session
  *                      (stat-only; /r1 = latest, /r2 = 2nd, current excluded)
- *   pi --r N         — same as /rN but at startup (pi --r 1 = resume latest)
- *   pi --r1 .. --r2  — boolean form of the same (pi --r1 = resume latest)
- *   pi --rn          — alias for --r1
  *   /rn / /rp        — step to the next (older) / previous (newer) session
  *                      relative to the current one (by creation time)
  *   /rs              — paginated session picker (last 20, "Load more", tier filter)
@@ -16,7 +13,8 @@
  *                      (asks for confirmation; top-level sessions untouched)
  *
  * All navigation skips sessions currently open in another live pi process
- * (src/active.ts). At startup, legacy subagent fork sessions left loose by
+ * (src/active.ts). Startup resume is pi's own `pi -c`; if it lands in a
+ * session another pi holds, the extension hops to the most recent free one. At startup, legacy subagent fork sessions left loose by
  * pi-subagents < 0.53 are moved once into `<parent>/forks/` (src/migrate.ts),
  * so afterwards nothing needs filtering and every command stays stat-only.
  *

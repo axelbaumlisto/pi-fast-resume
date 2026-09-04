@@ -61,7 +61,10 @@ export async function switchTo(
     withSession: async (newCtx) => {
       // Position lives only in this transient notice — no persistent footer
       // status line (it cost a whole extra footer row for the entire session).
-      newCtx.ui.notify(announce(label), "info");
+      // pi's interactive mode writes its own "Resumed session" status right
+      // after switchSession resolves, which would overwrite a notice issued
+      // synchronously here; defer one tick so ours lands last.
+      setTimeout(() => newCtx.ui.notify(announce(label), "info"), 0);
     },
   });
 }

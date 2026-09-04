@@ -1,7 +1,7 @@
 {
   "name": "pi-resume",
-  "version": "1.6.0",
-  "description": "Fast session resume for pi coding agent — /r1,/r2 ranked resume, /rn and /rp step navigation, pi-r launcher (resume before pi starts), /rs paginated picker, /rds subagent session cleanup; skips sessions open in other pi instances, tidies legacy subagent forks",
+  "version": "2.0.0",
+  "description": "Fast session resume for pi coding agent — /r1,/r2 ranked resume, /rn and /rp step navigation, pi -c collision guard, /rs paginated picker, /rds subagent session cleanup; skips sessions open in other pi instances, tidies legacy subagent forks",
   "type": "module",
   "license": "MIT",
   "keywords": [
@@ -15,11 +15,7 @@
     "type": "git",
     "url": "https://github.com/axelbaumlisto/pi-fast-resume.git"
   },
-  "bin": {
-    "pi-r": "bin/pi-r.mjs"
-  },
   "files": [
-    "bin",
     "extensions",
     "src",
     "README.md",

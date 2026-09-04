@@ -9,7 +9,6 @@
  *   4. Session fixtures: create fake sessions, verify scanner picks them up
  *   5. Config: /rs set page, /rs set days persisted
  *   6. Session dir encoding
- *   7. Startup flags (--r1/--rn/--r N) against a live pi run
  *   8. Tail rename: session_info appended past the head-scan window
  *   9. Picker duplicate-label resolution
  */
@@ -255,35 +254,6 @@ describe("Phase 6: Session dir encoding", () => {
     const { getSessionDir } = await import("../../src/session-dir.ts");
     const dir = getSessionDir("/any", "/x/sessions/--p--/s.jsonl");
     assert.equal(dir, "/x/sessions/--p--");
-  });
-});
-
-// ── Phase 7: Startup flags against a live pi run ───────────────────
-
-describe("Phase 7: Startup flags (--r1, --rn, --r N)", () => {
-  before(() => {
-    mkdirSync(PROJECT_CWD, { recursive: true });
-    writeSessionFile("flag1.jsonl", "fid1", "Flag test session");
-  });
-
-  // In -p mode switchSession is unavailable; the extension must degrade
-  // gracefully (a notice) and NEVER crash with "Extension error".
-  for (const flag of ["--r1", "--rn", "--r 1"]) {
-    it(`pi ${flag} does not produce an extension error`, () => {
-      const out = run(`cd ${PROJECT_CWD} && pi ${flag} -p --no-session 'test' 2>&1 || true`);
-      assert.ok(!out.includes("Extension error"), `pi ${flag} output: ${out.slice(0, 500)}`);
-    });
-  }
-
-  it("pi --r 99 (out of range) does not crash", () => {
-    const out = run(`cd ${PROJECT_CWD} && pi --r 99 -p --no-session 'test' 2>&1 || true`);
-    assert.ok(!out.includes("Extension error"), `output: ${out.slice(0, 500)}`);
-  });
-
-  it("registered flags appear in pi --help", () => {
-    const out = run("pi --help");
-    // Extension flags are announced in help output when registered.
-    assert.ok(!out.includes("Extension error"), "help should not error");
   });
 });
 

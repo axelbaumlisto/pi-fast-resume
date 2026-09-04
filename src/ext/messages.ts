@@ -11,7 +11,7 @@ export const MSG = {
   atNewest: "Already at the newest session",
   openElsewhere: "That session is open in another pi — not switching",
   switchCancelled: "Session switch was cancelled",
-  startupNeedsUI: "--r/--rn: session resume needs interactive mode",
+  continueBusy: "That session is open in another pi — resuming the most recent free one",
   movedForks: (n: number) => `Moved ${plural(n, "legacy subagent fork session")} into <parent>/forks/`,
   rds: {
     none: "No subagent sessions to delete for this project",

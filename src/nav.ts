@@ -93,19 +93,3 @@ export async function filterVisible<T extends FileRef>(files: T[], hidden: Hidde
   for (const f of files) if (!(await hidden(f))) out.push(f);
   return out;
 }
-
-/**
- * Parse the --r startup flag value.
- * Returns a rank, an error message, or undefined when the flag is unset.
- */
-export function parseRankFlag(
-  raw: unknown,
-  maxRank: number,
-): { rank: number } | { error: string } | undefined {
-  if (raw === undefined || raw === null || raw === false) return undefined;
-  const rank = parseInt(String(raw), 10);
-  if (isNaN(rank) || rank < 1 || rank > maxRank) {
-    return { error: `--r expects a number 1-${maxRank} (got "${raw}")` };
-  }
-  return { rank };
-}

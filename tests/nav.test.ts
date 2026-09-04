@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import { strict as assert } from "node:assert";
-import { rankTarget, navTarget, filterVisible, parseRankFlag, createdAtFromName, sortByCreated } from "../src/nav.ts";
+import { rankTarget, navTarget, filterVisible, createdAtFromName, sortByCreated } from "../src/nav.ts";
 
 const files = [{ file: "/s/newest" }, { file: "/s/mid" }, { file: "/s/oldest" }];
 
@@ -116,28 +116,6 @@ describe("filterVisible", () => {
     );
   });
 });
-
-describe("parseRankFlag", () => {
-  it("unset → undefined", () => {
-    assert.equal(parseRankFlag(undefined, 5), undefined);
-    assert.equal(parseRankFlag(false, 5), undefined);
-    assert.equal(parseRankFlag(null, 5), undefined);
-  });
-
-  it("valid numbers", () => {
-    assert.deepEqual(parseRankFlag("1", 5), { rank: 1 });
-    assert.deepEqual(parseRankFlag("5", 5), { rank: 5 });
-    assert.deepEqual(parseRankFlag(3, 5), { rank: 3 });
-  });
-
-  it("out of range / garbage → error", () => {
-    assert.ok("error" in parseRankFlag("0", 5)!);
-    assert.ok("error" in parseRankFlag("6", 5)!);
-    assert.ok("error" in parseRankFlag("abc", 5)!);
-    assert.ok("error" in parseRankFlag("", 5)!);
-  });
-});
-
 describe("createdAtFromName", () => {
   it("parses pi session filename timestamp", () => {
     const t = createdAtFromName("/s/2026-08-10T14-31-05-921Z_019fec15-97c1-7a42-bf80-307a87d6d5ae.jsonl");
